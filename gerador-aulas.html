@@ -366,6 +366,21 @@ iframe#frame {
   min-width: 0;
 }
 
+.btn-abort {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-abort:hover { background: rgba(240,96,76,0.15); }
+
 .gen-title {
   font-family: var(--font-ui);
   font-size: 0.82rem;
@@ -858,6 +873,7 @@ iframe#frame {
           <div class="gen-title" id="genTitle">Gerando índice…</div>
           <div class="gen-sub"   id="genSub"></div>
         </div>
+        <button class="btn-abort" onclick="cancelarGeracao()" title="Interromper geração">✕ parar</button>
       </div>
     </div>
 
@@ -926,6 +942,15 @@ let slideAtual  = 0;    // índice do slide visível no iframe
 let htmlGerado  = '';
 let _aulaAbertaId = null;      // ID da aula do banco atualmente aberta
 let _aulaAbertaNumero = null;  // número da aula no momento da abertura — imutável durante a sessão
+let _abortCtrl = null;         // AbortController da geração em andamento
+
+// Sincroniza slideAtual quando o usuário navega dentro do iframe
+window.addEventListener('message', e => {
+  if(e.data?.type==='aulagen-slide' && slidesData.length){
+    slideAtual=e.data.index;
+    atualizarEditBar();
+  }
+});
 
 // ══════════════════════════════════════════════════════════
 // CSS DO TEMPLATE (idêntico ao original do professor)
@@ -1137,6 +1162,7 @@ const showSlide = (i) => {
   cur=i;
   slides.forEach((s,j)=>{s.classList.remove('active');if(j===cur)s.classList.add('active');});
   pb.style.width=((cur+1)/total*100)+'%';
+  try{ window.parent.postMessage({type:'aulagen-slide',index:cur},'*'); }catch{}
 }
 const nextSlide = () => {showSlide(cur+1);}
 const prevSlide = () => {showSlide(cur-1);}
@@ -1217,6 +1243,10 @@ REGRAS ABSOLUTAS:
 // ── Chamada ao Ollama (sem stream — JSON pequeno não trunca) ─────────────────
 const modeloAtivo = () => document.querySelector('#modeloSelect').value;
 
+const cancelarGeracao = () => {
+  if(_abortCtrl){ _abortCtrl.abort(); _abortCtrl=null; }
+}
+
 const ollamaChat = async (url, modelo, system, user, maxTokens=4000) => {
   const ollamaUrl = url || 'http://localhost:11434';
 
@@ -1228,6 +1258,7 @@ const ollamaChat = async (url, modelo, system, user, maxTokens=4000) => {
   const r=await fetch(`${ollamaUrl}/api/chat`,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
+    signal: _abortCtrl?.signal,
     body:JSON.stringify({
       model:modelo, stream:true,
       think: thinking,
@@ -1390,6 +1421,7 @@ const gerarAula = async () => {
 
   mostrarPreview();
   setProg(3,'Planejando estrutura da aula…');
+  _abortCtrl = new AbortController();
   log(`Iniciando: "${tema}" · ${tempo}min · ${modelo}`, 'think');
 
   // Busca contexto da disciplina (aulas anteriores)
@@ -1501,9 +1533,21 @@ Gere o JSON completo e rico deste slide.`;
 
   }catch(e){
     hideOverlay();
-    log(`Erro: ${e.message}`, 'error');
-    setProg(0,`✘ Erro: ${e.message}`);
+    if(e.name==='AbortError'){
+      log('Geração interrompida pelo usuário.', 'muted');
+      setProg(0,'⊘ Interrompido');
+      if(slidesData.length){
+        htmlGerado=montarHtmlFinal(slidesData,meta);
+        renderFrame(htmlGerado);
+        atualizarEditBar();
+        log(`${slidesData.length} slide(s) parciais mantidos.`, 'info');
+      }
+    } else {
+      log(`Erro: ${e.message}`, 'error');
+      setProg(0,`✘ Erro: ${e.message}`);
+    }
   }finally{
+    _abortCtrl=null;
     btn.disabled=false;
     btn.innerHTML='Gerar aula';
   }
@@ -1546,6 +1590,7 @@ const editarSlide = async () => {
   btn.disabled=true;
   btn.innerHTML='<span class="spinner"></span>';
 
+  _abortCtrl = new AbortController();
   const s=slidesData[slideAtual];
   const tituloSlide=s.titulo_h1||s.titulo_h2||s.titulo||`slide ${slideAtual+1}`;
   log(`Editando slide ${slideAtual+1}: "${tituloSlide}"`, 'think');
@@ -1558,11 +1603,13 @@ const editarSlide = async () => {
     remontarHtml();
     document.querySelector('#editPrompt').value='';
     log(`Slide ${slideAtual+1} atualizado.`, 'success');
-    
+
     setTimeout(()=>iframeShowSlide(slideAtual),300);
   }catch(e){
-    log(`Erro ao editar: ${e.message}`, 'error');
+    if(e.name==='AbortError') log('Edição interrompida.', 'muted');
+    else log(`Erro ao editar: ${e.message}`, 'error');
   }finally{
+    _abortCtrl=null;
     hideOverlay();
     btn.disabled=false;
     btn.innerHTML='Aplicar';
@@ -1584,6 +1631,7 @@ const editarGeral = async () => {
   btn.innerHTML='<span class="spinner"></span>';
 
   log(`Edição geral em ${slidesData.length} slides: "${instrucao}"`, 'think');
+  _abortCtrl = new AbortController();
 
   let erros=0;
   for(let i=0;i<slidesData.length;i++){
@@ -1605,16 +1653,21 @@ const editarGeral = async () => {
       remontarHtml();
       setTimeout(()=>iframeShowSlide(i),150);
     }catch(e){
+      if(e.name==='AbortError'){
+        log(`Edição geral interrompida no slide ${i+1}.`, 'muted');
+        break;
+      }
       erros++;
       log(`⚠ Slide ${i+1} falhou: ${e.message}`, 'error');
     }
   }
 
+  _abortCtrl=null;
   hideOverlay();
   setProg(100,'✔ Edição geral concluída');
   document.querySelector('#editPrompt').value='';
   log(`Edição geral concluída. ${erros>0?erros+' erro(s).':'Sem erros.'}`, erros>0?'error':'success');
-  
+
   btn.disabled=false;
   btn.innerHTML='Aplicar';
 }
