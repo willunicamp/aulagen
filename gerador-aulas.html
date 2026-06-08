@@ -480,6 +480,76 @@ iframe#frame {
 }
 .edit-bar-input textarea::placeholder { color: var(--muted); font-style: italic; }
 
+/* ── PREVIEW TABS (topo) ────────────────────── */
+.preview-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.preview-tab {
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.preview-tab.active { background: var(--orange); color: var(--cream); }
+.preview-tab:hover:not(.active) { color: var(--cream); }
+
+/* ── JSON VIEW (substitui iframe) ───────────── */
+#jsonView {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-deep);
+  gap: 0;
+}
+#jsonView.active { display: flex; }
+#jsonEditor {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  resize: none;
+  color: var(--cream);
+  background: var(--surface);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+  margin: 0;
+  min-height: 0;
+  outline: none;
+}
+#jsonEditor.invalid { background: rgba(240,96,76,0.05); }
+.json-view-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#jsonError {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--error);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── LOG OVERLAY ────────────────────────────── */
 #logOverlay {
   display: none;
@@ -597,11 +667,11 @@ iframe#frame {
 }
 .queue-badge.visible { display: inline-block; }
 
-/* ── BTN-ENQUEUE (yellow variant of btn-primary) */
+/* ── BTN-ENQUEUE */
 .btn-enqueue {
   width: 100%;
-  background: var(--warn);
-  color: #1a2e38;
+  background: var(--orange);
+  color: var(--cream);
   border: none;
   border-radius: 6px;
   padding: 11px 16px;
@@ -613,9 +683,10 @@ iframe#frame {
   transition: background 0.2s, transform 0.1s;
   letter-spacing: 0.2px;
 }
-.btn-enqueue:hover { background: #d99b38; }
+.btn-enqueue:hover { background: var(--orange-dim); }
 .btn-enqueue:active { transform: scale(0.98); }
 .btn-enqueue:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.enqueue-pos { opacity: 0.75; font-weight: 400; font-size: 0.82rem; letter-spacing: 0; }
 
 /* ── QUEUE PANEL ─────────────────────────────── */
 #queuePanel {
@@ -819,7 +890,7 @@ iframe#frame {
       <textarea id="obsExtras" placeholder="Ex: incluir fs.readFileSync e JSON.parse, turma já conhece Promises..."></textarea>
 
       <button class="btn-enqueue" id="btnGerar" onclick="gerarAula()">
-        ＋ Enfileirar
+        + Enfileirar <span class="enqueue-pos" id="enqueuePosGerar">[1]</span>
       </button>
     </div>
 
@@ -979,7 +1050,11 @@ iframe#frame {
   <div id="previewWrapper">
     <div class="preview-bar">
       <span class="slide-info" id="slideInfo">—</span>
-      <button class="btn-ghost" onclick="recarregar()">↺</button>
+      <div class="preview-tabs">
+        <button class="preview-tab active" id="ptabVisual" onclick="switchPreviewTab('visual')" title="Visualização renderizada">◧ Visual</button>
+        <button class="preview-tab"        id="ptabJson"   onclick="switchPreviewTab('json')"   title="Editar JSON do slide">{ } JSON</button>
+      </div>
+      <button class="btn-ghost" id="btnRecarregar" onclick="recarregar()" title="Recarregar preview">↺</button>
     </div>
     <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
 
@@ -996,6 +1071,16 @@ iframe#frame {
     </div>
 
     <iframe id="frame" title="Preview da aula"></iframe>
+
+    <!-- Editor JSON (substitui o iframe quando ativo) -->
+    <div id="jsonView">
+      <textarea id="jsonEditor" spellcheck="false" oninput="jsonEditorInput()"></textarea>
+      <div class="json-view-footer">
+        <span id="jsonError"></span>
+        <button class="btn-ghost" onclick="resetJsonEditor()" style="height:32px;padding:0 12px;font-size:0.78rem;flex-shrink:0;">↺ Reset</button>
+        <button class="btn-primary" onclick="aplicarJson()" style="height:32px;padding:0 16px;font-size:0.8rem;flex-shrink:0;">✓ Aplicar</button>
+      </div>
+    </div>
 
     <!-- Edit bar -->
     <div id="editBar">
@@ -1020,7 +1105,7 @@ iframe#frame {
           placeholder="Descreva o que alterar neste slide… (Ctrl+Enter para aplicar)"
           onkeydown="editKeydown(event)"></textarea>
         <button class="btn-enqueue" id="btnEditar" onclick="aplicarEdicao()" style="width:auto; padding:0 18px; height:44px; align-self:flex-end;">
-          ＋ Enfileirar
+          + Enfileirar <span class="enqueue-pos" id="enqueuePosEditar">[1]</span>
         </button>
       </div>
     </div>
@@ -1035,7 +1120,14 @@ iframe#frame {
   <div id="queuePanel">
     <div class="queue-panel-header">
       <span class="queue-panel-title">Fila de Jobs</span>
-      <span class="queue-close" onclick="toggleQueuePanel()">✕</span>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <span style="cursor:pointer;color:var(--muted);font-size:0.72rem;letter-spacing:0.3px;"
+              title="Cancelar todos os jobs pendentes"
+              onclick="const n=JobQueue.clearPending();if(!n)log('Nenhum job pendente.','muted');">
+          ✕ limpar pendentes
+        </span>
+        <span class="queue-close" onclick="toggleQueuePanel()">✕</span>
+      </div>
     </div>
     <div class="queue-list" id="queueList">
       <div class="queue-empty">Nenhum job na fila.</div>
@@ -1431,8 +1523,20 @@ const JobQueue = (() => {
       } else {
         job.status = 'error';
         log(`✘ Erro em ${jobLabel(job)}: ${e.message}`, 'error');
+        // TypeError = Failed to fetch → Ollama offline → cancela tudo pendente
+        if (e instanceof TypeError) {
+          const n = JobQueue.clearPending();
+          if (n > 0) log(`⚠ Ollama offline — ${n} job(s) pendente(s) cancelados.`, 'error');
+          const dot = document.querySelector('#statusDot');
+          const txt = document.querySelector('#statusText');
+          if (dot) dot.className = 'dot error';
+          if (txt) txt.textContent = 'ollama offline';
+        }
       }
     }
+
+    // Persiste estado da tela após cada job (edições, geração, etc.)
+    salvarSessao();
 
     renderQueuePanel();
     updateQueueBadge();
@@ -1440,8 +1544,57 @@ const JobQueue = (() => {
     setTimeout(() => processQueue(), 120);
   };
 
-  return { enqueue, cancelJob, get queue() { return _queue; } };
+  const restoreJobs = (jobs) => {
+    jobs.forEach(j => {
+      _queue.push({ ...j, status: 'pending' });
+      if (j.id >= _nextId) _nextId = j.id + 1;
+    });
+    renderQueuePanel();
+    updateQueueBadge();
+    if (!_running) processQueue();
+  };
+
+  const clearPending = () => {
+    let count = 0;
+    _queue.forEach(j => { if (j.status === 'pending') { j.status = 'aborted'; count++; } });
+    if (count) {
+      renderQueuePanel();
+      updateQueueBadge();
+    }
+    return count;
+  };
+
+  return { enqueue, cancelJob, restoreJobs, clearPending, get queue() { return _queue; } };
 })();
+
+// ── Persistência da fila em sessionStorage ───────────────────────────────────
+const QUEUE_STORAGE_KEY = 'aulagem_queue_v1';
+
+const saveQueueToStorage = () => {
+  try {
+    const toSave = JobQueue.queue
+      .filter(j => j.status === 'pending' || j.status === 'running')
+      .map(j => ({ ...j, status: 'pending' }));
+    if (toSave.length) {
+      sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(toSave));
+    } else {
+      sessionStorage.removeItem(QUEUE_STORAGE_KEY);
+    }
+  } catch(_) {}
+};
+
+const restoreQueueFromStorage = () => {
+  try {
+    const raw = sessionStorage.getItem(QUEUE_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!Array.isArray(saved) || !saved.length) return;
+    sessionStorage.removeItem(QUEUE_STORAGE_KEY);
+    JobQueue.restoreJobs(saved);
+    log(`↺ ${saved.length} job(s) restaurado(s) da sessão anterior.`, 'info');
+    document.querySelector('#queuePanel')?.classList.add('visible');
+  } catch(_) {}
+};
 
 const snapshotConfig = () => ({
   tema:          document.querySelector('#tema').value.trim(),
@@ -1463,6 +1616,11 @@ const snapshotConfig = () => ({
   editTab:       _editTab,
   editPrompt:    document.querySelector('#editPrompt')?.value.trim() || '',
   slideAtual:    slideAtual,
+  slidesResumo:  slidesData.map((s, i) => ({
+    n:      i + 1,
+    tipo:   s.tipo || 'conteudo',
+    titulo: s.titulo_h1 || s.titulo_h2 || s.titulo || `Slide ${i + 1}`,
+  })),
 });
 
 const applyConfigSnap = (snap) => {
@@ -1521,9 +1679,12 @@ const renderQueuePanel = () => {
 const updateQueueBadge = () => {
   const badge = document.querySelector('#queueBadge');
   if (!badge) return;
-  const pending = JobQueue.queue.filter(j => j.status === 'pending' || j.status === 'running').length;
-  badge.textContent = pending;
-  badge.classList.toggle('visible', pending > 0);
+  const active = JobQueue.queue.filter(j => j.status === 'pending' || j.status === 'running').length;
+  badge.textContent = active;
+  badge.classList.toggle('visible', active > 0);
+  const nextPos = `[${active + 1}]`;
+  document.querySelectorAll('.enqueue-pos').forEach(el => el.textContent = nextPos);
+  saveQueueToStorage();
 };
 
 const toggleQueuePanel = () => {
@@ -1615,15 +1776,40 @@ const ollamaChat = async (url, modelo, system, user, maxTokens=4000) => {
   return buf;
 }
 
-const systemPromptEditar = () => {
-  return `Você edita objetos JSON de slides. Recebe o JSON de um slide e uma instrução. Devolva APENAS o JSON modificado — sem markdown, sem texto adicional.
+const systemPromptEditar = (ctxAula = '') => {
+  const blocoCtx = ctxAula
+    ? `\n\nCONTEXTO DA AULA (mantenha rigorosa coerência com este tema e linguagem):\n${ctxAula}`
+    : '';
+  return `Você edita objetos JSON de slides. Recebe o JSON de um slide e uma instrução.${blocoCtx}
 
 TIPOS DE BLOCO disponíveis:
 paragrafo, lista, lista_numerada, codigo, focus_box, grid_2, grid_3, quest_list, subtitulo.
 (mesma estrutura do sistema de geração)
 
-Responda SOMENTE com o JSON do slide modificado.`;
+Responda SOMENTE com o JSON do slide modificado — sem markdown, sem texto adicional.`;
 }
+
+// Monta o bloco de contexto da aula para injetar nos prompts de edição/adição
+const buildContextoEdicao = (snap, slideAtualIdx = -1) => {
+  const discObj = _disciplinas.find(d => String(d.id) === String(snap.disciplinaId));
+  const partes  = [];
+  if (discObj?.nome) {
+    const desc = discObj.descricao ? ` — ${discObj.descricao}` : '';
+    partes.push(`Disciplina: ${discObj.nome}${desc}`);
+  }
+  if (snap.tema)    partes.push(`Tema da aula: ${snap.tema}`);
+  if (snap.numAula) partes.push(`Aula nº: ${snap.numAula}`);
+  if (snap.obs)     partes.push(`Observações do professor: ${snap.obs}`);
+  const resumo = snap.slidesResumo || [];
+  if (resumo.length) {
+    const linhas = resumo.map(s => {
+      const marker = (slideAtualIdx >= 0 && s.n === slideAtualIdx + 1) ? '→' : ' ';
+      return `  ${marker} Slide ${s.n} (${s.tipo}): ${s.titulo}`;
+    }).join('\n');
+    partes.push(`\nEstrutura da aula:\n${linhas}`);
+  }
+  return partes.join('\n');
+};
 
 // ══════════════════════════════════════════════════════════
 // OLLAMA
@@ -1722,8 +1908,9 @@ const _executeGerarAula = async (job) => {
   if(contextoDisc) log('Contexto da disciplina carregado.', 'info');
 
   const numSlides=Math.max(8,Math.round(Number(tempo)/5));
+  const discDescricao = discObj?.descricao ? `\nDescrição da disciplina: ${discObj.descricao}` : '';
   const contextoAula=`Tema: ${tema}
-Disciplina: ${disciplina||'(não especificada)'}
+Disciplina: ${disciplina||'(não especificada)'}${discDescricao}
 Aula nº: ${numAula}
 Tempo: ${tempo} min → ~${numSlides} slides
 Observações do professor: ${obs||'Nenhuma.'}
@@ -1856,17 +2043,75 @@ const switchEditTab = (tab) => {
   document.querySelector('#tabSlide').classList.toggle('active', tab==='slide');
   document.querySelector('#tabGeral').classList.toggle('active', tab==='geral');
   const ta = document.querySelector('#editPrompt');
-  if(tab==='slide'){
-    ta.placeholder='Descreva o que alterar neste slide… (Ctrl+Enter para aplicar)';
-  } else {
-    ta.placeholder='Descreva uma alteração geral para TODOS os slides… Ex: Adicione mais exemplos de código, deixe os textos mais concisos, use tom mais didático';
-  }
+  ta.placeholder = tab==='slide'
+    ? 'Descreva o que alterar neste slide… (Ctrl+Enter para aplicar)'
+    : 'Descreva uma alteração geral para TODOS os slides… Ex: Adicione mais exemplos de código, deixe os textos mais concisos, use tom mais didático';
   ta.focus();
 }
 
 const aplicarEdicao = () => {
   if(_editTab==='slide') editarSlide();
   else editarGeral();
+}
+
+// ── Abas do preview (Visual / JSON) ─────────────────────────────────────────
+let _previewTab = 'visual'; // 'visual' | 'json'
+
+const switchPreviewTab = (tab) => {
+  _previewTab = tab;
+  document.querySelector('#ptabVisual').classList.toggle('active', tab==='visual');
+  document.querySelector('#ptabJson')  .classList.toggle('active', tab==='json');
+  document.querySelector('#frame')     .style.display = tab==='visual' ? 'block' : 'none';
+  document.querySelector('#jsonView')  .classList.toggle('active', tab==='json');
+  document.querySelector('#btnRecarregar').style.display = tab==='visual' ? '' : 'none';
+  if(tab==='json') carregarJsonEditor();
+}
+
+// ── Editor JSON manual ───────────────────────────────────────────────────────
+const carregarJsonEditor = () => {
+  if(!slidesData.length) return;
+  const ta = document.querySelector('#jsonEditor');
+  ta.value = JSON.stringify(slidesData[slideAtual], null, 2);
+  ta.classList.remove('invalid');
+  document.querySelector('#jsonError').textContent = '';
+}
+
+const resetJsonEditor = () => carregarJsonEditor();
+
+const jsonEditorInput = () => {
+  const ta  = document.querySelector('#jsonEditor');
+  const err = document.querySelector('#jsonError');
+  try {
+    JSON.parse(ta.value);
+    ta.classList.remove('invalid');
+    err.textContent = '';
+  } catch(e) {
+    ta.classList.add('invalid');
+    err.textContent = e.message;
+  }
+}
+
+const aplicarJson = () => {
+  const ta  = document.querySelector('#jsonEditor');
+  const err = document.querySelector('#jsonError');
+  let parsed;
+  try {
+    parsed = JSON.parse(ta.value);
+  } catch(e) {
+    ta.classList.add('invalid');
+    err.textContent = e.message;
+    return;
+  }
+  ta.classList.remove('invalid');
+  err.textContent = '';
+  slidesData[slideAtual] = parsed;
+  remontarHtml();
+  // Volta ao visual para ver o resultado
+  switchPreviewTab('visual');
+  setTimeout(() => iframeShowSlide(slideAtual), 200);
+  autosaveBanco();
+  salvarSessao();
+  log(`Slide ${slideAtual+1} atualizado via JSON.`, 'success');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1901,7 +2146,8 @@ const _executeEditarSlide = async (job) => {
   _abortCtrl = new AbortController();
 
   try{
-    const novoSlide=await ollamaChateComRetry(url, modelo, systemPromptEditar(),
+    const ctxAula  = buildContextoEdicao(snap, idx);
+    const novoSlide=await ollamaChateComRetry(url, modelo, systemPromptEditar(ctxAula),
       `JSON do slide:\n${JSON.stringify(s,null,2)}\n\nInstrução:\n${instrucao}`, 4000);
     slidesData[idx]=novoSlide;
     remontarHtml();
@@ -1946,6 +2192,8 @@ const _executeEditarGeral = async (job) => {
   log(`Edição geral em ${slides.length} slides: "${instrucao}"`, 'think');
   _abortCtrl = new AbortController();
 
+  const ctxAulaGeral = buildContextoEdicao(snap);
+
   let erros=0;
   for(let i=0;i<slides.length;i++){
     const s=slides[i];
@@ -1956,7 +2204,7 @@ const _executeEditarGeral = async (job) => {
     setProg(Math.round((i/slides.length)*100), `Slide ${i+1}/${slides.length}`);
 
     try{
-      const raw=await ollamaChat(url, modelo, systemPromptEditar(),
+      const raw=await ollamaChat(url, modelo, systemPromptEditar(ctxAulaGeral),
         `JSON do slide:\n${JSON.stringify(s,null,2)}\n\nInstrução geral a aplicar neste slide (adapte conforme o contexto do slide):\n${instrucao}`,
         4000);
       const novoSlide=parseJson(raw);
@@ -2017,8 +2265,9 @@ const _executeAdicionarSlide = async (job) => {
   _abortCtrl = new AbortController();
 
   try{
+    const ctxAulaAdd = buildContextoEdicao(snap, pos);
     const novoSlide=await ollamaChateComRetry(url, modelo, systemPromptSlide(),
-      `Descrição do slide: ${instrucao}`, 3000);
+      `${ctxAulaAdd}\n\nDescrição do novo slide: ${instrucao}`, 3000);
     slidesData.splice(pos, 0, novoSlide);
     slideAtual=pos;
     remontarHtml();
@@ -2108,6 +2357,7 @@ const atualizarEditBar = () => {
     `slide ${slideAtual+1} / ${slidesData.length} — ${titulo.slice(0,40)}`;
   document.querySelector('#btnPrev').disabled=(slideAtual===0);
   document.querySelector('#btnNext').disabled=(slideAtual===slidesData.length-1);
+  if(_previewTab==='json') carregarJsonEditor();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2418,6 +2668,7 @@ const ollamaChateComRetry = async (url, modelo, system, user, maxTokens=4000, ma
       log(`⚠ Tentativa ${tentativa}/${maxRetries} — slide inválido: ${ultimoErro}`, 'error');
 
     }catch(e){
+      if(e.name === 'AbortError') throw e; // cancelamento imediato, sem retry
       ultimoErro = e.message;
       log(`⚠ Tentativa ${tentativa}/${maxRetries} — erro: ${ultimoErro}`, 'error');
       if(tentativa===maxRetries) throw e;
@@ -2502,6 +2753,7 @@ const salvarSessao = async () => {
           cor_destaque:  document.querySelector('#corDestaque').value,
           cor_deep:      document.querySelector('#corDeep').value,
           cor_texto:     document.querySelector('#corTexto').value,
+          slide_atual:   slideAtual,
         }
       })
     });
@@ -2544,7 +2796,10 @@ const restaurarSessao = async () => {
     // Restaura slides e abre o preview
     _aulaAbertaId = aulaId;
     _aulaAbertaNumero = s.meta?.numero ? parseInt(s.meta.numero) : null;
-    slidesData=s.slides;
+    slidesData = s.slides;
+    slideAtual  = parseInt(s.meta?.slide_atual) || 0;
+    slideAtual  = Math.max(0, Math.min(slideAtual, slidesData.length - 1));
+
     const discObj=_disciplinas.find(d=>String(d.id)===String(s.meta?.disciplina_id));
     htmlGerado=montarHtmlFinal(slidesData, {
       tema:         s.tema,
@@ -2561,6 +2816,16 @@ const restaurarSessao = async () => {
     renderFrame(htmlGerado);
     atualizarEditBar();
     document.querySelector('#btnDownload').style.display='inline-flex';
+    document.querySelector('#btnFecharAula').style.display='inline-flex';
+    document.querySelector('#btnSalvarMeta').style.display='flex';
+
+    // Restaura seleção da aula no dropdown para deixar claro qual está aberta
+    document.querySelector('#aulaSelect').value = aulaId;
+    aulaSelectChanged();
+
+    // Navega ao slide que estava sendo editado
+    if(slideAtual > 0) setTimeout(() => iframeShowSlide(slideAtual), 500);
+
     document.querySelector('#slideInfo').textContent=`↺ Sessão restaurada — "${s.tema}" (${s.slides.length} slides)`;
     log(`Sessão restaurada: "${s.tema}" (${s.slides.length} slides)`,'success');
   }catch(e){
@@ -3004,6 +3269,7 @@ const salvarAulaNoBanco = async (slides, tema, modelo) => {
       if(data.aula_id && !_aulaAbertaId){
         _aulaAbertaId=data.aula_id;
         _aulaAbertaNumero=numero;
+        salvarSessao(); // persiste o aula_id recém-obtido na sessão
       }
       log(`Salvo: ${data.caminho||'banco'}`, 'muted');
     }
@@ -3080,7 +3346,7 @@ carregarDisciplinas().then(()=>{
       selecionarDisciplina(saved.disciplinaSelect);
     }
   }catch(_){}
-  restaurarSessao();
+  restaurarSessao().then(() => restoreQueueFromStorage());
 });
 </script>
 </body>
