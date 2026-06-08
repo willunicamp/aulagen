@@ -582,6 +582,121 @@ iframe#frame {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
 
+/* ── QUEUE BADGE ─────────────────────────────── */
+.queue-badge {
+  background: var(--warn);
+  color: #1a2e38;
+  border-radius: 10px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+  display: none;
+}
+.queue-badge.visible { display: inline-block; }
+
+/* ── BTN-ENQUEUE (yellow variant of btn-primary) */
+.btn-enqueue {
+  width: 100%;
+  background: var(--warn);
+  color: #1a2e38;
+  border: none;
+  border-radius: 6px;
+  padding: 11px 16px;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 0.2s, transform 0.1s;
+  letter-spacing: 0.2px;
+}
+.btn-enqueue:hover { background: #d99b38; }
+.btn-enqueue:active { transform: scale(0.98); }
+.btn-enqueue:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+/* ── QUEUE PANEL ─────────────────────────────── */
+#queuePanel {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(26,46,56,0.97);
+  z-index: 100;
+  flex-direction: column;
+  padding: 24px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  line-height: 1.8;
+  gap: 0;
+}
+#queuePanel.visible { display: flex; }
+
+.queue-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+.queue-panel-title {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--cream);
+  letter-spacing: 0.2px;
+}
+.queue-close {
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+.queue-close:hover { color: var(--cream); }
+
+.queue-list { display: flex; flex-direction: column; gap: 8px; }
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.queue-item.running  { border-color: var(--orange); }
+.queue-item.done     { border-color: var(--success); opacity: 0.7; }
+.queue-item.error    { border-color: var(--error);   opacity: 0.7; }
+.queue-item.aborted  { border-color: var(--muted);   opacity: 0.5; }
+
+.queue-item-icon { font-size: 0.9rem; flex-shrink: 0; width: 16px; text-align: center; }
+.queue-item-label { flex: 1; color: var(--cream); font-family: var(--font-ui); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-item-status { font-size: 0.68rem; color: var(--muted); flex-shrink: 0; }
+
+.btn-cancel-job {
+  background: none;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btn-cancel-job:hover { background: rgba(240,96,76,0.15); }
+
+.queue-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  text-align: center;
+  margin-top: 40px;
+}
+
 /* ── COLOR CHIP PREVIEW ─────────────────────── */
 .color-field { position: relative; display: flex; gap: 6px; align-items: center; margin-bottom: 12px; }
 .color-field input[type="text"] { flex: 1; padding-right: 11px; margin-bottom: 0; font-family: var(--font-mono); font-size: 0.8rem; }
@@ -631,6 +746,9 @@ iframe#frame {
     <button class="btn-ghost" id="btnFecharAula" style="display:none;color:var(--muted);" onclick="fecharAula()">✕ Fechar aula</button>
     <button class="btn-ghost" id="btnDownload" style="display:none" onclick="baixarHtml()">↓ Baixar HTML</button>
     <button class="btn-ghost" onclick="toggleLog()">≡ Log</button>
+    <button class="btn-ghost" id="btnFila" onclick="toggleQueuePanel()" style="position:relative;">
+      ⊟ Fila <span class="queue-badge" id="queueBadge">0</span>
+    </button>
   </div>
 </header>
 
@@ -700,8 +818,8 @@ iframe#frame {
       <label>Observações</label>
       <textarea id="obsExtras" placeholder="Ex: incluir fs.readFileSync e JSON.parse, turma já conhece Promises..."></textarea>
 
-      <button class="btn-primary" id="btnGerar" onclick="gerarAula()">
-        Gerar aula
+      <button class="btn-enqueue" id="btnGerar" onclick="gerarAula()">
+        ＋ Enfileirar
       </button>
     </div>
 
@@ -901,8 +1019,8 @@ iframe#frame {
         <textarea id="editPrompt" rows="2"
           placeholder="Descreva o que alterar neste slide… (Ctrl+Enter para aplicar)"
           onkeydown="editKeydown(event)"></textarea>
-        <button class="btn-primary" id="btnEditar" onclick="aplicarEdicao()" style="width:auto; padding:0 18px; height:44px; align-self:flex-end;">
-          Aplicar
+        <button class="btn-enqueue" id="btnEditar" onclick="aplicarEdicao()" style="width:auto; padding:0 18px; height:44px; align-self:flex-end;">
+          ＋ Enfileirar
         </button>
       </div>
     </div>
@@ -911,6 +1029,17 @@ iframe#frame {
   <!-- Log overlay -->
   <div id="logOverlay">
     <span class="log-close" onclick="toggleLog()">✕</span>
+  </div>
+
+  <!-- Queue panel -->
+  <div id="queuePanel">
+    <div class="queue-panel-header">
+      <span class="queue-panel-title">Fila de Jobs</span>
+      <span class="queue-close" onclick="toggleQueuePanel()">✕</span>
+    </div>
+    <div class="queue-list" id="queueList">
+      <div class="queue-empty">Nenhum job na fila.</div>
+    </div>
   </div>
 
 </main>
@@ -1247,6 +1376,170 @@ const cancelarGeracao = () => {
   if(_abortCtrl){ _abortCtrl.abort(); _abortCtrl=null; }
 }
 
+// ══════════════════════════════════════════════════════════
+// JOB QUEUE
+// ══════════════════════════════════════════════════════════
+const JobQueue = (() => {
+  let _queue = [];
+  let _running = false;
+  let _nextId = 1;
+
+  const enqueue = (type, payload) => {
+    const job = { id: _nextId++, type, payload, status: 'pending' };
+    _queue.push(job);
+    log(`⊟ Job enfileirado: ${jobLabel(job)}`, 'muted');
+    renderQueuePanel();
+    updateQueueBadge();
+    if (!_running) processQueue();
+    return job.id;
+  };
+
+  const cancelJob = (id) => {
+    const job = _queue.find(j => j.id === id);
+    if (!job) return;
+    if (job.status === 'running') {
+      cancelarGeracao();
+    } else if (job.status === 'pending') {
+      job.status = 'aborted';
+      log(`⊘ Job cancelado: ${jobLabel(job)}`, 'muted');
+      renderQueuePanel();
+      updateQueueBadge();
+    }
+  };
+
+  const processQueue = async () => {
+    const job = _queue.find(j => j.status === 'pending');
+    if (!job) { _running = false; renderQueuePanel(); updateQueueBadge(); return; }
+    _running = true;
+    job.status = 'running';
+    log(`▶ Executando: ${jobLabel(job)}`, 'think');
+    renderQueuePanel();
+    updateQueueBadge();
+
+    // Swap DOM config from job snapshot
+    const snap = job.payload._configSnap;
+    if (snap) applyConfigSnap(snap);
+
+    try {
+      await executeJob(job);
+      job.status = 'done';
+      log(`✔ Concluído: ${jobLabel(job)}`, 'success');
+    } catch(e) {
+      if (e.name === 'AbortError') {
+        job.status = 'aborted';
+        log(`⊘ Abortado: ${jobLabel(job)}`, 'muted');
+      } else {
+        job.status = 'error';
+        log(`✘ Erro em ${jobLabel(job)}: ${e.message}`, 'error');
+      }
+    }
+
+    renderQueuePanel();
+    updateQueueBadge();
+    // Small delay before next job so UI can breathe
+    setTimeout(() => processQueue(), 120);
+  };
+
+  return { enqueue, cancelJob, get queue() { return _queue; } };
+})();
+
+const snapshotConfig = () => ({
+  tema:          document.querySelector('#tema').value.trim(),
+  numAula:       document.querySelector('#numAula').value,
+  tempo:         document.querySelector('#tempo').value,
+  obs:           document.querySelector('#obsExtras').value.trim(),
+  linkHeader:    document.querySelector('#linkHeader').value.trim(),
+  modelo:        document.querySelector('#modeloSelect').value,
+  url:           document.querySelector('#ollamaUrl').value,
+  disciplinaId:  document.querySelector('#disciplinaSelect').value,
+  corPrincipal:  document.querySelector('#corPrincipal').value.trim(),
+  corDestaque:   document.querySelector('#corDestaque').value.trim(),
+  corDeep:       document.querySelector('#corDeep').value.trim(),
+  corTexto:      document.querySelector('#corTexto').value.trim(),
+  thinking:      document.querySelector('#chkThinking')?.checked || false,
+  tokens:        document.querySelector('#rangeTokens')?.value || '4000',
+  ctx:           document.querySelector('#rangeCtx')?.value || '65536',
+  temp:          document.querySelector('#rangeTemp')?.value || '0.7',
+  editTab:       _editTab,
+  editPrompt:    document.querySelector('#editPrompt')?.value.trim() || '',
+  slideAtual:    slideAtual,
+});
+
+const applyConfigSnap = (snap) => {
+  // These fields drive the AI calls — restore them for the duration of the job
+  document.querySelector('#tema').value        = snap.tema;
+  document.querySelector('#numAula').value     = snap.numAula;
+  document.querySelector('#tempo').value       = snap.tempo;
+  document.querySelector('#obsExtras').value   = snap.obs;
+  document.querySelector('#linkHeader').value  = snap.linkHeader;
+  if (snap.modelo) document.querySelector('#modeloSelect').value = snap.modelo;
+  document.querySelector('#ollamaUrl').value   = snap.url;
+  document.querySelector('#disciplinaSelect').value = snap.disciplinaId;
+  document.querySelector('#corPrincipal').value = snap.corPrincipal;
+  document.querySelector('#corDestaque').value  = snap.corDestaque;
+  document.querySelector('#corDeep').value      = snap.corDeep;
+  document.querySelector('#corTexto').value     = snap.corTexto;
+  if (document.querySelector('#chkThinking')) document.querySelector('#chkThinking').checked = snap.thinking;
+  if (document.querySelector('#rangeTokens')) document.querySelector('#rangeTokens').value = snap.tokens;
+  if (document.querySelector('#rangeCtx'))    document.querySelector('#rangeCtx').value    = snap.ctx;
+  if (document.querySelector('#rangeTemp'))   document.querySelector('#rangeTemp').value   = snap.temp;
+};
+
+const jobLabel = (job) => {
+  const s = job.payload._configSnap;
+  switch(job.type) {
+    case 'gerarAula':     return `Gerar: "${s?.tema || '?'}"`;
+    case 'editarSlide':   return `Editar slide ${(s?.slideAtual ?? 0)+1}: "${s?.editPrompt?.slice(0,30) || '?'}"`;
+    case 'editarGeral':   return `Edição geral: "${s?.editPrompt?.slice(0,30) || '?'}"`;
+    case 'adicionarSlide':return `Add slide: "${s?.editPrompt?.slice(0,30) || '?'}"`;
+    default:              return job.type;
+  }
+};
+
+const renderQueuePanel = () => {
+  const list = document.querySelector('#queueList');
+  if (!list) return;
+  const jobs = JobQueue.queue;
+  if (!jobs.length) {
+    list.innerHTML = '<div class="queue-empty">Nenhum job na fila.</div>';
+    return;
+  }
+  list.innerHTML = jobs.map(job => {
+    const icon = { pending:'○', running:'◎', done:'✔', error:'✘', aborted:'⊘' }[job.status] || '○';
+    const cancelBtn = (job.status === 'pending' || job.status === 'running')
+      ? `<button class="btn-cancel-job" onclick="JobQueue.cancelJob(${job.id})">✕</button>`
+      : '';
+    return `<div class="queue-item ${job.status}">
+      <span class="queue-item-icon">${icon}</span>
+      <span class="queue-item-label">${jobLabel(job)}</span>
+      <span class="queue-item-status">${job.status}</span>
+      ${cancelBtn}
+    </div>`;
+  }).join('');
+};
+
+const updateQueueBadge = () => {
+  const badge = document.querySelector('#queueBadge');
+  if (!badge) return;
+  const pending = JobQueue.queue.filter(j => j.status === 'pending' || j.status === 'running').length;
+  badge.textContent = pending;
+  badge.classList.toggle('visible', pending > 0);
+};
+
+const toggleQueuePanel = () => {
+  document.querySelector('#queuePanel').classList.toggle('visible');
+};
+
+const executeJob = async (job) => {
+  switch(job.type) {
+    case 'gerarAula':      return _executeGerarAula(job);
+    case 'editarSlide':    return _executeEditarSlide(job);
+    case 'editarGeral':    return _executeEditarGeral(job);
+    case 'adicionarSlide': return _executeAdicionarSlide(job);
+    default: throw new Error(`Tipo de job desconhecido: ${job.type}`);
+  }
+};
+
 const ollamaChat = async (url, modelo, system, user, maxTokens=4000) => {
   const ollamaUrl = url || 'http://localhost:11434';
 
@@ -1397,27 +1690,27 @@ const hideOverlay = () => {
 }
 
 // ══════════════════════════════════════════════════════════
-// GERAR AULA — abordagem índice + slides individuais
+// GERAR AULA — enfileira o job
 // ══════════════════════════════════════════════════════════
-const gerarAula = async () => {
-  const tema       = document.querySelector('#tema').value.trim();
-  const numAula    = document.querySelector('#numAula').value;
-  const tempo      = document.querySelector('#tempo').value;
-  const obs        = document.querySelector('#obsExtras').value.trim();
-  const linkHeader = document.querySelector('#linkHeader').value.trim();
-  const modelo     = modeloAtivo();
-  const url        = document.querySelector('#ollamaUrl').value;
-
-  // Pega nome da disciplina do select (não mais de campo texto)
-  const discId  = document.querySelector('#disciplinaSelect').value;
-  const discObj = _disciplinas.find(d=>String(d.id)===String(discId));
-  const disciplina = discObj?.nome || '';
-
+const gerarAula = () => {
+  const tema = document.querySelector('#tema').value.trim();
   if(!tema){ alert('Preencha o tema!'); return; }
+  const snap = snapshotConfig();
+  JobQueue.enqueue('gerarAula', { _configSnap: snap });
+};
 
-  const btn=document.querySelector('#btnGerar');
-  btn.disabled=true;
-  btn.innerHTML='<span class="spinner"></span> Planejando…';
+const _executeGerarAula = async (job) => {
+  const snap      = job.payload._configSnap;
+  const tema      = snap.tema;
+  const numAula   = snap.numAula;
+  const tempo     = snap.tempo;
+  const obs       = snap.obs;
+  const linkHeader= snap.linkHeader;
+  const modelo    = snap.modelo;
+  const url       = snap.url;
+  const discId    = snap.disciplinaId;
+  const discObj   = _disciplinas.find(d=>String(d.id)===String(discId));
+  const disciplina= discObj?.nome || '';
 
   mostrarPreview();
   setProg(3,'Planejando estrutura da aula…');
@@ -1438,10 +1731,10 @@ ${contextoDisc ? '\n'+contextoDisc : ''}`;
 
   const meta={
     tema, disciplina, numero:numAula, link_header:linkHeader,
-    cor_principal:document.querySelector('#corPrincipal').value.trim(),
-    cor_destaque: document.querySelector('#corDestaque').value.trim(),
-    cor_deep:     document.querySelector('#corDeep').value.trim(),
-    cor_texto:    document.querySelector('#corTexto').value.trim(),
+    cor_principal:snap.corPrincipal,
+    cor_destaque: snap.corDestaque,
+    cor_deep:     snap.corDeep,
+    cor_texto:    snap.corTexto,
   };
 
   slidesData=[];
@@ -1463,7 +1756,6 @@ ${contextoDisc ? '\n'+contextoDisc : ''}`;
     if(!Array.isArray(listaSlides)) throw new Error('Índice inválido');
 
     log(`Índice pronto: ${listaSlides.length} slides planejados.`, 'success');
-    btn.innerHTML='<span class="spinner"></span> Gerando slides…';
 
     // ── FASE 2: gera cada slide individualmente ────────────────────────────
     const topicos=listaSlides.map((s,i)=>`${i+1}. [${s.tipo}] ${s.titulo}`).join('\n');
@@ -1507,6 +1799,7 @@ Gere o JSON completo e rico deste slide.`;
         setTimeout(()=>iframeShowSlide(slidesData.length-1), 200);
 
       }catch(e){
+        if(e.name==='AbortError') throw e;
         log(`⚠ Slide ${i+1} falhou (${e.message}), pulando…`, 'error');
         slidesData.push({
           tipo:'conteudo',
@@ -1514,7 +1807,7 @@ Gere o JSON completo e rico deste slide.`;
           titulo_h2: item.titulo||'Erro na geração',
           blocos:[{tipo:'focus_box',icone:'fa-triangle-exclamation',
                    titulo:'Slide não gerado',
-                   texto:`Erro: ${e.message}. Use ✏️ Editar para regenerar.`}]
+                   texto:`Erro: ${e.message}. Use Editar para regenerar.`}]
         });
       }
     }
@@ -1528,7 +1821,7 @@ Gere o JSON completo e rico deste slide.`;
     setProg(100,`✔ ${slidesData.length} slides gerados`);
     log(`Aula completa! ${slidesData.length} slides.`, 'success');
     document.querySelector('#btnDownload').style.display='inline-flex';
-    
+
     salvarAulaNoBanco(slidesData, tema, modelo);
 
   }catch(e){
@@ -1542,14 +1835,14 @@ Gere o JSON completo e rico deste slide.`;
         atualizarEditBar();
         log(`${slidesData.length} slide(s) parciais mantidos.`, 'info');
       }
+      throw e;
     } else {
       log(`Erro: ${e.message}`, 'error');
       setProg(0,`✘ Erro: ${e.message}`);
+      throw e;
     }
   }finally{
     _abortCtrl=null;
-    btn.disabled=false;
-    btn.innerHTML='Gerar aula';
   }
 }
 
@@ -1577,81 +1870,90 @@ const aplicarEdicao = () => {
 }
 
 // ══════════════════════════════════════════════════════════
-// EDITAR SLIDE ATUAL
+// EDITAR SLIDE ATUAL — enfileira o job
 // ══════════════════════════════════════════════════════════
-const editarSlide = async () => {
+const editarSlide = () => {
   if(_aulaAbertaId === null){
-    console.warn('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.');
     log('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.', 'error');
     return;
   }
   if(!guardarEdicao()) return;
   const instrucao=document.querySelector('#editPrompt').value.trim();
   if(!instrucao){ alert('Descreva o que quer alterar!'); return; }
+  const snap = snapshotConfig();
+  // Store the slide JSON at enqueue time so the job edits the right version
+  const slideSnapshot = JSON.parse(JSON.stringify(slidesData[slideAtual]));
+  JobQueue.enqueue('editarSlide', { _configSnap: snap, slideSnapshot, slideIndex: slideAtual });
+  document.querySelector('#editPrompt').value='';
+};
 
-  const modelo=modeloAtivo();
-  const url   =document.querySelector('#ollamaUrl').value;
-  const btn   =document.querySelector('#btnEditar');
-  btn.disabled=true;
-  btn.innerHTML='<span class="spinner"></span>';
+const _executeEditarSlide = async (job) => {
+  const snap       = job.payload._configSnap;
+  const modelo     = snap.modelo;
+  const url        = snap.url;
+  const instrucao  = snap.editPrompt;
+  const idx        = job.payload.slideIndex;
+  const s          = job.payload.slideSnapshot;
+  const tituloSlide= s.titulo_h1||s.titulo_h2||s.titulo||`slide ${idx+1}`;
 
+  log(`Editando slide ${idx+1}: "${tituloSlide}"`, 'think');
+  showOverlay(`Editando slide ${idx+1}`, tituloSlide);
   _abortCtrl = new AbortController();
-  const s=slidesData[slideAtual];
-  const tituloSlide=s.titulo_h1||s.titulo_h2||s.titulo||`slide ${slideAtual+1}`;
-  log(`Editando slide ${slideAtual+1}: "${tituloSlide}"`, 'think');
-  showOverlay(`Editando slide ${slideAtual+1}`, tituloSlide);
 
   try{
     const novoSlide=await ollamaChateComRetry(url, modelo, systemPromptEditar(),
       `JSON do slide:\n${JSON.stringify(s,null,2)}\n\nInstrução:\n${instrucao}`, 4000);
-    slidesData[slideAtual]=novoSlide;
+    slidesData[idx]=novoSlide;
     remontarHtml();
-    document.querySelector('#editPrompt').value='';
-    log(`Slide ${slideAtual+1} atualizado.`, 'success');
-
-    setTimeout(()=>iframeShowSlide(slideAtual),300);
+    log(`Slide ${idx+1} atualizado.`, 'success');
+    setTimeout(()=>iframeShowSlide(idx),300);
   }catch(e){
-    if(e.name==='AbortError') log('Edição interrompida.', 'muted');
-    else log(`Erro ao editar: ${e.message}`, 'error');
+    if(e.name==='AbortError'){ hideOverlay(); _abortCtrl=null; throw e; }
+    log(`Erro ao editar slide: ${e.message}`, 'error');
+    throw e;
   }finally{
     _abortCtrl=null;
     hideOverlay();
-    btn.disabled=false;
-    btn.innerHTML='Aplicar';
   }
 }
 
 // ══════════════════════════════════════════════════════════
-// EDIÇÃO GERAL — aplica instrução a todos os slides
+// EDIÇÃO GERAL — enfileira o job
 // ══════════════════════════════════════════════════════════
-const editarGeral = async () => {
+const editarGeral = () => {
   if(_aulaAbertaId === null){
-    console.warn('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.');
     log('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.', 'error');
     return;
   }
   if(!guardarEdicao()) return;
   const instrucao=document.querySelector('#editPrompt').value.trim();
   if(!instrucao){ alert('Descreva a alteração geral!'); return; }
+  const snap = snapshotConfig();
+  // Snapshot all slides at enqueue time
+  const slidesSnapshot = JSON.parse(JSON.stringify(slidesData));
+  JobQueue.enqueue('editarGeral', { _configSnap: snap, slidesSnapshot });
+  document.querySelector('#editPrompt').value='';
+};
 
-  const modelo=modeloAtivo();
-  const url   =document.querySelector('#ollamaUrl').value;
-  const btn   =document.querySelector('#btnEditar');
-  btn.disabled=true;
-  btn.innerHTML='<span class="spinner"></span>';
+const _executeEditarGeral = async (job) => {
+  const snap     = job.payload._configSnap;
+  const modelo   = snap.modelo;
+  const url      = snap.url;
+  const instrucao= snap.editPrompt;
+  // Work on live slidesData — but read from the snapshot to avoid cross-job corruption
+  const slides   = job.payload.slidesSnapshot;
 
-  log(`Edição geral em ${slidesData.length} slides: "${instrucao}"`, 'think');
+  log(`Edição geral em ${slides.length} slides: "${instrucao}"`, 'think');
   _abortCtrl = new AbortController();
 
   let erros=0;
-  for(let i=0;i<slidesData.length;i++){
-    const s=slidesData[i];
-    // Slides de tópico têm pouco conteúdo — pula se a instrução for sobre conteúdo
+  for(let i=0;i<slides.length;i++){
+    const s=slides[i];
     if(s.tipo==='topico') continue;
 
     const titulo=s.titulo_h1||s.titulo_h2||s.titulo||`slide ${i+1}`;
-    showOverlay(`Aplicando em slide ${i+1} de ${slidesData.length}`, titulo);
-    setProg(Math.round((i/slidesData.length)*100), `Slide ${i+1}/${slidesData.length}`);
+    showOverlay(`Aplicando em slide ${i+1} de ${slides.length}`, titulo);
+    setProg(Math.round((i/slides.length)*100), `Slide ${i+1}/${slides.length}`);
 
     try{
       const raw=await ollamaChat(url, modelo, systemPromptEditar(),
@@ -1659,13 +1961,15 @@ const editarGeral = async () => {
         4000);
       const novoSlide=parseJson(raw);
       slidesData[i]=novoSlide;
-      // Atualiza preview a cada slide
       remontarHtml();
       setTimeout(()=>iframeShowSlide(i),150);
     }catch(e){
       if(e.name==='AbortError'){
         log(`Edição geral interrompida no slide ${i+1}.`, 'muted');
-        break;
+        _abortCtrl=null;
+        hideOverlay();
+        setProg(0,'⊘ Interrompido');
+        throw e;
       }
       erros++;
       log(`⚠ Slide ${i+1} falhou: ${e.message}`, 'error');
@@ -1675,11 +1979,7 @@ const editarGeral = async () => {
   _abortCtrl=null;
   hideOverlay();
   setProg(100,'✔ Edição geral concluída');
-  document.querySelector('#editPrompt').value='';
   log(`Edição geral concluída. ${erros>0?erros+' erro(s).':'Sem erros.'}`, erros>0?'error':'success');
-
-  btn.disabled=false;
-  btn.innerHTML='Aplicar';
 }
 
 // Ctrl+Enter submete
@@ -1693,18 +1993,28 @@ const addSlidePrompt = async (onde) => {
     ? `antes do slide ${slideAtual+1}`
     : `depois do slide ${slideAtual+1}`;
 
-  // Usa o campo de texto do edit bar como prompt
   const ta=document.querySelector('#editPrompt');
   const instrucaoAtual=ta.value.trim();
   const instrucao = instrucaoAtual ||
     await promptInline(`Descreva o novo slide (${label}):`);
   if(!instrucao) return;
 
-  const modelo=modeloAtivo();
-  const url   =document.querySelector('#ollamaUrl').value;
-  const btn   =document.querySelector('#btnEditar');
-  btn.disabled=true;
-  showOverlay(`Criando slide ${label}…`, instrucao.slice(0,50));
+  const snap = snapshotConfig();
+  // Override editPrompt in snap with the final instrucao
+  snap.editPrompt = instrucao;
+  JobQueue.enqueue('adicionarSlide', { _configSnap: snap, pos });
+  ta.value='';
+};
+
+const _executeAdicionarSlide = async (job) => {
+  const snap     = job.payload._configSnap;
+  const modelo   = snap.modelo;
+  const url      = snap.url;
+  const instrucao= snap.editPrompt;
+  const pos      = job.payload.pos;
+
+  showOverlay(`Criando slide na posição ${pos+1}…`, instrucao.slice(0,50));
+  _abortCtrl = new AbortController();
 
   try{
     const novoSlide=await ollamaChateComRetry(url, modelo, systemPromptSlide(),
@@ -1714,14 +2024,14 @@ const addSlidePrompt = async (onde) => {
     remontarHtml();
     atualizarEditBar();
     setTimeout(()=>iframeShowSlide(slideAtual), 200);
-    ta.value='';
     log(`Slide inserido na posição ${pos+1}.`, 'success');
-    
   }catch(e){
+    if(e.name==='AbortError'){ hideOverlay(); _abortCtrl=null; throw e; }
     log(`Erro ao criar slide: ${e.message}`, 'error');
+    throw e;
   }finally{
+    _abortCtrl=null;
     hideOverlay();
-    btn.disabled=false;
   }
 }
 
