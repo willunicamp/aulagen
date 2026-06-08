@@ -1580,6 +1580,11 @@ const aplicarEdicao = () => {
 // EDITAR SLIDE ATUAL
 // ══════════════════════════════════════════════════════════
 const editarSlide = async () => {
+  if(_aulaAbertaId === null){
+    console.warn('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.');
+    log('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.', 'error');
+    return;
+  }
   if(!guardarEdicao()) return;
   const instrucao=document.querySelector('#editPrompt').value.trim();
   if(!instrucao){ alert('Descreva o que quer alterar!'); return; }
@@ -1620,6 +1625,11 @@ const editarSlide = async () => {
 // EDIÇÃO GERAL — aplica instrução a todos os slides
 // ══════════════════════════════════════════════════════════
 const editarGeral = async () => {
+  if(_aulaAbertaId === null){
+    console.warn('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.');
+    log('Nenhuma aula selecionada — selecione uma aula na lista antes de editar.', 'error');
+    return;
+  }
   if(!guardarEdicao()) return;
   const instrucao=document.querySelector('#editPrompt').value.trim();
   if(!instrucao){ alert('Descreva a alteração geral!'); return; }
@@ -2174,6 +2184,7 @@ const salvarSessao = async () => {
         tema:document.querySelector('#tema').value,
         slides:slidesData,
         meta:{
+          aula_id:       _aulaAbertaId,
           disciplina_id: discId ? parseInt(discId) : null,
           numero:        document.querySelector('#numAula').value,
           link_header:   document.querySelector('#linkHeader').value,
@@ -2194,9 +2205,8 @@ const restaurarSessao = async () => {
     const data=await r.json();
     if(!data.ok||!data.session) return;
     const s=data.session;
-    if(!s.slides||!s.slides.length) return;
 
-    // Restaura campos do formulário
+    // Restaura campos do formulário e disciplina sempre que houver meta
     if(s.tema) document.querySelector('#tema').value=s.tema;
     if(s.meta){
       const m=s.meta;
@@ -2207,14 +2217,23 @@ const restaurarSessao = async () => {
       if(m.cor_deep)     {document.querySelector('#corDeep').value=m.cor_deep;          updateChip(document.querySelector('#corDeep'));}
       if(m.cor_texto)    {document.querySelector('#corTexto').value=m.cor_texto;        updateChip(document.querySelector('#corTexto'));}
 
-      // Restaura disciplina no select (por ID se disponível, senão por nome)
+      // Restaura disciplina no select
       if(m.disciplina_id){
         document.querySelector('#disciplinaSelect').value=m.disciplina_id;
         await selecionarDisciplina(m.disciplina_id);
       }
     }
 
-    // Restaura slides
+    // Só renderiza slides se a sessão pertence a uma aula salva no banco (aula_id presente)
+    const aulaId = s.meta?.aula_id || null;
+    if(!aulaId || !s.slides || !s.slides.length){
+      log('Sessão restaurada (campos do formulário). Nenhuma aula aberta — selecione na lista.', 'muted');
+      return;
+    }
+
+    // Restaura slides e abre o preview
+    _aulaAbertaId = aulaId;
+    _aulaAbertaNumero = s.meta?.numero ? parseInt(s.meta.numero) : null;
     slidesData=s.slides;
     const discObj=_disciplinas.find(d=>String(d.id)===String(s.meta?.disciplina_id));
     htmlGerado=montarHtmlFinal(slidesData, {
@@ -2709,6 +2728,11 @@ const importarHtmlParaDisciplina = async (event) => {
     const data=await r.json();
     if(!data.ok) throw new Error(data.error||'Erro');
     log(`✓ "${tema}" importada. Resumo sendo gerado…`, 'success');
+    // Registra a aula como aberta para que edições e autosave funcionem
+    if(data.aula_id){
+      _aulaAbertaId=data.aula_id;
+      _aulaAbertaNumero=numero;
+    }
     slidesData=slides;
     document.querySelector('#tema').value=tema;
     document.querySelector('#numAula').value=numero;
@@ -2717,6 +2741,7 @@ const importarHtmlParaDisciplina = async (event) => {
     slideAtual=0;
     document.querySelector('#btnDownload').style.display='inline-flex';
     await selecionarDisciplina(discId);
+    salvarSessao();
     
   }catch(e){ log(`Erro ao importar: ${e.message}`, 'error'); }
 }
