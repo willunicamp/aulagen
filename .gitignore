@@ -1,0 +1,7 @@
+aulagem.db
+session.json
+session.tmp
+__pycache__/
+*.pyc
+.env
+.claude/
